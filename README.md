@@ -9,11 +9,9 @@
 ```bash
     npm install
     npm run start
- 
+
 ```
-
-
 
 ## Example Usage
 
-![alt text](https://github.com/DigitArc/TinderCloneReactNative/blob/master/tinderclone.gif)
+![alt text](https://github.com/berkelmas/reactNativeTinder/blob/master/tinderclone.gif)

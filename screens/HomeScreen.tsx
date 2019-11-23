@@ -38,20 +38,25 @@ const {
   lessThan,
   multiply,
   concat,
-  abs
-
+  abs,
+  or
 } = Animated;
 
 const BottomCard = props => {
   const [people, setPeople] = useState(persons);
   const [currentIndex, setCurrentIndex] = useState(people.length - 1);
-  const {gestureState, cardTransX, cardTransY, cardVelX} = useMemoOne(() => ({
+  const {gestureState, cardTransX, cardTransY, cardVelX, tapState, scaleVal, onLike, onDislike} = useMemoOne(() => ({
     gestureState : new Value(State.UNDETERMINED),
     cardTransX : new Value(0),
     cardTransY : new Value(0),
-    cardVelX : new Value(0)
+    cardVelX : new Value(0),
+    tapState : new Value(State.UNDETERMINED),
+    scaleVal : new Value(1),
+    onLike : new Value(0) as Animated.Value<0 | 1>,
+    onDislike : new Value(0) as Animated.Value<0 | 1>
   }), [])
 
+  // HANDLE PAN EVENT HERE
   const handlePan = event([
     {
       nativeEvent: ({ state, translationX, translationY, velocityX }) =>
@@ -63,6 +68,32 @@ const BottomCard = props => {
         ])
     }
   ]);
+
+  // HANDLE LIKE TAP EVENT HERE
+  const handleTapLike = event([
+    {
+      nativeEvent : ({state}) => block([
+        set(gestureState, state),
+        cond(eq(state, State.END), [
+          set(cardVelX, 101),
+          set(onLike, 1)
+        ])
+      ])
+    }
+  ])
+
+  // HANDLE DISLIKE EVENT HERE
+  const handleTapDislike = event([
+    {
+      nativeEvent : ({state}) => block([
+        set(gestureState, state),
+        cond(eq(state, State.END), [
+          set(cardVelX, -101),
+          set(onDislike, 1)
+        ])
+      ])
+    }
+  ])
 
   const withSpringX = (
     gestureState: Animated.Value<State>,
@@ -86,18 +117,6 @@ const BottomCard = props => {
       restDisplacementThreshold: 0.001,
       toValue: new Value(0)
     };
-
-    const timingState = {
-      finished : new Value(0), 
-      position : new Value(0), 
-      frameTime : new Value(0), 
-      time : new Value(0)
-    }
-    const timingConfig = {
-      toValue : new Value(0), 
-      duration : 400, 
-      easing : Easing.linear
-    }
 
     return block([
       cond(and(clockRunning(clock), eq(gestureState, State.BEGAN)), [
@@ -127,7 +146,7 @@ const BottomCard = props => {
             set(state.time, 0),
             set(config.toValue, -500),
             set(state.velocity, 0),
-            call([], () => setCurrentIndex(curr => curr - 1)),
+            call([], () => setCurrentIndex(curr => curr - 1 )),
             startClock(clock)
           ]),
           spring(clock, state, config),
@@ -181,17 +200,6 @@ const BottomCard = props => {
       toValue: new Value(0)
     };
 
-    const timingState = {
-      finished : new Value(0), 
-      position : new Value(0), 
-      frameTime : new Value(0), 
-      time : new Value(0)
-    }
-    const timingConfig = {
-      toValue : new Value(0), 
-      duration : 400, 
-      easing : Easing.linear
-    }
 
     return block([
       cond(and(clockRunning(clock), eq(gestureState, State.BEGAN)), [
@@ -249,8 +257,91 @@ const BottomCard = props => {
     ]);
   };
 
+  const buttonWithSpring = (tapState: Animated.Value<State>, value: Animated.Value<number>, dest: number) => {
+    const clockStart = new Clock();
+    const clockEnd = new Clock();
+    const offset = new Value(1);
+    const stateStart = {
+      finished: new Value(0),
+      position: new Value(0),
+      velocity: new Value(0),
+      time: new Value(0)
+    };
+    const stateEnd = {
+      finished: new Value(0),
+      position: new Value(0),
+      velocity: new Value(0),
+      time: new Value(0)
+    };
+    const configStart = {
+      stiffness: new Value(100),
+      mass: new Value(1),
+      damping: new Value(10),
+      overshootClamping: false,
+      restSpeedThreshold: 0.001,
+      restDisplacementThreshold: 0.001,
+      toValue: new Value(0)
+    };
+    const configEnd = {
+      stiffness: new Value(100),
+      mass: new Value(1),
+      damping: new Value(10),
+      overshootClamping: false,
+      restSpeedThreshold: 0.001,
+      restDisplacementThreshold: 0.001,
+      toValue: new Value(0)
+    };
+
+
+    return block([
+      cond(eq(tapState, State.BEGAN), [
+        cond(and(not(clockRunning(clockStart)), not(stateStart.finished)), [
+          cond(not(stateEnd.finished), [
+            debug("STOP second ON began", stopClock(clockEnd)),
+            set(stateEnd.finished, 0)
+          ]),
+          set(stateStart.position, value),
+          set(stateStart.time, 0),
+          set(configStart.toValue, dest),
+          debug("START CLOCK BEGAN", startClock(clockStart))
+        ]),
+        spring(clockStart, stateStart, configStart),
+        set(offset, stateStart.position),
+        cond(stateStart.finished, [
+          debug("STOP CLOCK BEGAN", stopClock(clockStart)),
+          set(stateStart.finished, 0)
+        ])
+      ]),
+      cond(eq(tapState, State.END), [
+        cond(and(not(clockRunning(clockEnd)), not(stateEnd.finished)), [
+          cond(not(stateStart.finished), [
+            debug("STOP FIRST ON END", stopClock(clockStart)),
+            set(stateStart.finished, 0)
+          ]),
+          set(stateEnd.position, offset),
+          set(stateEnd.time, 0),
+          set(configEnd.toValue, 1),
+          debug("START CLOCK END", startClock(clockEnd))
+        ]),
+        spring(clockEnd, stateEnd, configEnd),
+        set(offset, stateEnd.position),
+        cond(stateEnd.finished, [
+          debug("STOP CLOCK END", stopClock(clockEnd)),
+          set(stateEnd.finished, 0)
+        ])
+      ]),
+      offset
+    ]);
+  }
+
   const cardTransXSpring = withSpringX(gestureState, cardTransX, cardVelX);
   const cardTransYSpring = withSpringY(gestureState, cardTransY, cardVelX);
+
+  const buttonScaleSpring = buttonWithSpring(gestureState, scaleVal, 0.9);
+  const buttonShadowRad = Animated.interpolate(buttonScaleSpring, {
+    inputRange: [0.9, 1],
+    outputRange: [2, 3]
+  })
 
   const rotateVal = Animated.interpolate(cardTransXSpring, {
     inputRange: [-100, 100],
@@ -415,12 +506,18 @@ const BottomCard = props => {
         })}
       </View>
       <View style={{ ...styles.footer }}>
-        <View style={{ ...styles.likeButton }}>
-          <EvilIcons name="heart" size={50} color="#66bb6a" />
-        </View>
-        <View style={{ ...styles.dislikeButton }}>
-          <EvilIcons name="close" size={50} color="#e53935" />
-        </View>
+
+        <TapGestureHandler onHandlerStateChange={handleTapLike}>
+          <Animated.View style={{ ...styles.likeButton }}>
+            <EvilIcons name="heart" size={50} color="#66bb6a" />
+          </Animated.View>
+        </TapGestureHandler>
+
+        <TapGestureHandler onHandlerStateChange={handleTapDislike}>
+          <Animated.View style={{ ...styles.dislikeButton }}>
+            <EvilIcons name="close" size={50} color="#e53935" />
+          </Animated.View>
+        </TapGestureHandler>
       </View>
     </View>
   );
@@ -453,7 +550,8 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     backgroundColor: "#f7f7f7",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+
   },
   dislikeButton: {
     height: 80,
@@ -461,7 +559,8 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     backgroundColor: "#f7f7f7",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+   
   },
   cardContainer: {
     width: Dimensions.get("window").width,
