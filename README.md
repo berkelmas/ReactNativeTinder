@@ -1,4 +1,4 @@
-# Digitarc Swipable Deck
+# Tinder Clone App
 
 ## Introduction
 
